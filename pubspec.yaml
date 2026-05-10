@@ -1,0 +1,78 @@
+name: derma_ai
+description: "A AI-powered dermatology assistant for skin health monitoring."
+publish_to: 'none'
+version: 1.0.0+1
+
+environment:
+  sdk: ^3.10.8
+
+dependencies:
+  flutter:
+    sdk: flutter
+
+  cupertino_icons: ^1.0.8
+  http: ^1.2.0
+  image_picker: ^1.0.7
+  geolocator: ^11.0.0
+  permission_handler: ^11.0.0
+  google_maps_flutter: ^2.6.0
+  firebase_core: ^2.32.0
+  firebase_auth: ^4.16.0
+  cloud_firestore: ^4.17.5
+  supabase_flutter: ^2.0.0
+  speech_to_text: ^7.3.0
+  url_launcher: ^6.2.5
+  shimmer: ^3.0.0
+  flutter_dotenv: ^5.1.0
+  flutter_tts: ^3.8.5
+  intl_phone_field: ^3.2.0
+  uuid: ^4.5.1
+  audioplayers: ^5.2.1
+  path_provider: ^2.1.2
+  app_links: ^6.0.0
+  geocoding: ^2.1.1
+  #app_links: ^3.4.0
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  flutter_launcher_icons: ^0.13.1
+  flutter_native_splash: ^2.4.0
+  flutter_lints: ^3.0.0
+
+flutter_launcher_icons:
+  android: "launcher_icon"
+  ios: true
+  image_path: "assets/DermaAI.png"
+  adaptive_icon_background: "#0056D2"
+  adaptive_icon_foreground: "assets/DermaAI.png"
+
+flutter_native_splash:
+  color: "#0056D2"
+  image: "assets/DermaAI.png"
+  android_12:
+    color: "#0056D2"
+    icon_backgroundColor: "#0056D2"
+    image: "assets/DermaAI.png"
+  fullscreen: true
+
+flutter:
+  uses-material-design: true
+
+
+  assets:
+    - assets/onboarding1.jpeg
+    - assets/onboarding2.jpeg
+    - assets/onboarding3.jpeg
+    - assets/splash_capsules.jpeg
+    - assets/DermaAI.png
+    - assets/upload.jpeg
+    - assets/scan.jpeg
+    - assets/doc1.jpeg
+    - assets/doc2.jpeg
+    - assets/doc3.png
+    - assets/fdoc1.png
+    - assets/fdoc2.png
+    - assets/fdoc3.PNG
+    - assets/robo.jpeg
+    - .env

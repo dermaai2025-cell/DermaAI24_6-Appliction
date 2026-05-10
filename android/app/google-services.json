@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "168567877965",
+    "project_id": "dermaai-93c21",
+    "storage_bucket": "dermaai-93c21.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:168567877965:android:673b996fcb1b9bd48a4704",
+        "android_client_info": {
+          "package_name": "com.example.derma_ai"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyC2BkdsOwC3zCdhxEA4JXdz7llrRcjKjnI"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
