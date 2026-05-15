@@ -1,7 +1,10 @@
+import 'dart:async';
 import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:google_maps_flutter/google_maps_flutter.dart';
 import 'package:http/http.dart' as http;
+import 'package:geolocator/geolocator.dart';
+import 'package:flutter_tts/flutter_tts.dart';
 
 class MapScreen extends StatefulWidget {
   final double lat;
@@ -22,176 +25,342 @@ class MapScreen extends StatefulWidget {
 class _MapScreenState extends State<MapScreen> {
   GoogleMapController? mapController;
   Set<Marker> markers = {};
-  
-  // Variables for routing and UI
   Set<Polyline> polylines = {};
+
   String? distanceText;
   String? durationText;
   String? selectedClinicName;
+  List<dynamic> routeSteps = [];
 
-  // 👇 NEW: Variables to track selected mode and destination 👇
-  String travelMode = 'driving'; // Default to driving. Options: 'driving', 'walking'
+  String travelMode = 'driving';
   double? currentDestLat;
   double? currentDestLng;
 
   bool isLoading = true;
+  bool isNavigating = false;
+
+  StreamSubscription<Position>? positionStream;
+  late FlutterTts flutterTts;
 
   @override
   void initState() {
     super.initState();
+    initTts();
     fetchClinics();
+  }
+
+  void initTts() {
+    flutterTts = FlutterTts();
+    flutterTts.setLanguage("ar-SA");
+    flutterTts.setPitch(1.0);
+    flutterTts.setSpeechRate(0.5);
+  }
+
+  @override
+  void dispose() {
+    positionStream?.cancel();
+    flutterTts.stop();
+    super.dispose();
+  }
+
+  String cleanHtmlText(String htmlText) {
+    return htmlText.replaceAll(RegExp(r'<[^>]*>|&[^;]+;'), "");
   }
 
   Future<void> fetchClinics() async {
     final url =
         "https://maps.googleapis.com/maps/api/place/nearbysearch/json"
         "?location=${widget.lat},${widget.lng}"
-        "&radius=5000"
-        "&type=doctor"
-        "&keyword=dermatologist"
-        "&key=${widget.apiKey}";
+        "&radius=5000&type=doctor&keyword=dermatologist&key=${widget.apiKey}";
 
     try {
       final response = await http.get(Uri.parse(url));
-
       if (response.statusCode == 200) {
         final data = json.decode(response.body);
-        
-        if (data['status'] != 'OK' && data['status'] != 'ZERO_RESULTS') {
-          print("PLACES API ERROR: ${data['status']} - ${data['error_message'] ?? ''}");
-          if (!mounted) return;
-          setState(() => isLoading = false);
-          return;
-        }
-
         final results = data["results"];
         Set<Marker> newMarkers = {};
 
-        // Add User location marker
         newMarkers.add(
           Marker(
             markerId: const MarkerId("user_location"),
             position: LatLng(widget.lat, widget.lng),
-            infoWindow: const InfoWindow(title: "You are here"),
-            icon: BitmapDescriptor.defaultMarkerWithHue(BitmapDescriptor.hueBlue),
+            infoWindow: const InfoWindow(title: "Current location"),
+            icon: BitmapDescriptor.defaultMarkerWithHue(
+              BitmapDescriptor.hueBlue,
+            ),
           ),
         );
 
-        // Add Clinics markers
         for (var clinic in results) {
           var loc = clinic["geometry"]["location"];
-          double destLat = loc["lat"];
-          double destLng = loc["lng"];
-          String clinicName = clinic["name"];
+          String clinicId = clinic["place_id"];
+          String name = clinic["name"];
 
           newMarkers.add(
             Marker(
-              markerId: MarkerId(clinic["place_id"] ?? clinicName),
-              position: LatLng(destLat, destLng),
+              markerId: MarkerId(clinicId),
+              position: LatLng(loc["lat"], loc["lng"]),
+              // 👇 إضافة InfoWindow لإظهار الاسم 👇
               infoWindow: InfoWindow(
-                title: clinicName,
-                snippet: clinic["vicinity"],
+                title: name,
+                snippet: "Press to start Direction ",
               ),
               onTap: () {
-                // Pass the current default travel mode when first tapped
-                getDirections(destLat, destLng, clinicName, travelMode);
+                // إظهار نافذة الاسم يدوياً عند الضغط
+                mapController?.showMarkerInfoWindow(MarkerId(clinicId));
+                getDirections(loc["lat"], loc["lng"], name, travelMode);
               },
             ),
           );
         }
-
-        if (!mounted) return;
         setState(() {
           markers = newMarkers;
           isLoading = false;
         });
-
-      } else {
-        if (!mounted) return;
-        setState(() => isLoading = false);
       }
     } catch (e) {
-      print("Error fetching clinics: $e");
-      if (!mounted) return;
-      setState(() => isLoading = false);
+      debugPrint("Error: $e");
     }
   }
 
-  // 👇 UPDATED: Added 'mode' parameter to the function 👇
-  Future<void> getDirections(double destLat, double destLng, String clinicName, String mode) async {
-    setState(() {
-      isLoading = true;
-      // Save the current destination so we can recalculate if the user changes the mode
-      currentDestLat = destLat;
-      currentDestLng = destLng;
-      travelMode = mode;
-      selectedClinicName = clinicName;
-    });
+  Future<void> getDirections(
+    double destLat,
+    double destLng,
+    String clinicName,
+    String mode,
+  ) async {
+    setState(() => isLoading = true);
 
-    // 👇 UPDATED: Added &mode=$mode to the API URL 👇
-    final url = 
+    final url =
         "https://maps.googleapis.com/maps/api/directions/json"
         "?origin=${widget.lat},${widget.lng}"
         "&destination=$destLat,$destLng"
-        "&mode=$mode" 
+        "&mode=$mode"
+        "&language=ar"
         "&key=${widget.apiKey}";
 
     try {
       final response = await http.get(Uri.parse(url));
+      final data = json.decode(response.body);
+      if (data['status'] == 'OK') {
+        final route = data['routes'][0];
+        final leg = route['legs'][0];
 
-      if (response.statusCode == 200) {
-        final data = json.decode(response.body);
+        setState(() {
+          currentDestLat = destLat;
+          currentDestLng = destLng;
+          travelMode = mode;
+          selectedClinicName = clinicName;
+          distanceText = leg['distance']['text'];
+          durationText = leg['duration']['text'];
+          routeSteps = leg['steps'];
 
-        if (data['status'] == 'OK') {
-          final route = data['routes'][0];
-          final leg = route['legs'][0];
+          polylines = {
+            Polyline(
+              polylineId: const PolylineId("route"),
+              color: mode == 'walking' ? Colors.green : Colors.blue,
+              width: 6,
+              points: decodePolyline(route['overview_polyline']['points']),
+            ),
+          };
+          isLoading = false;
+        });
 
-          final dist = leg['distance']['text'];
-          final dur = leg['duration']['text'];
-          final encodedPolyline = route['overview_polyline']['points'];
-
-          List<LatLng> polylineCoordinates = decodePolyline(encodedPolyline);
-
-          if (!mounted) return;
-          setState(() {
-            distanceText = dist;
-            durationText = dur;
-            
-            // Draw the line (change color slightly based on mode to give visual feedback)
-            polylines = {
-              Polyline(
-                polylineId: const PolylineId("route"),
-                color: mode == 'walking' ? Colors.green : Colors.blue,
-                width: 5,
-                // Make walking lines dotted for better UI context
-                patterns: mode == 'walking' 
-                    ? [PatternItem.dash(20), PatternItem.gap(10)] 
-                    : <PatternItem>[],
-                points: polylineCoordinates,
-              )
-            };
-            isLoading = false;
-          });
-          
-          mapController?.animateCamera(
-             CameraUpdate.newLatLngBounds(
-               boundsFromLatLngList(polylineCoordinates), 50.0)
-          );
-        } else {
-           setState(() => isLoading = false);
-        }
+        mapController?.animateCamera(
+          CameraUpdate.newLatLngBounds(
+            boundsFromLatLngList(polylines.first.points),
+            70,
+          ),
+        );
       }
     } catch (e) {
-      print("Error fetching directions: $e");
       setState(() => isLoading = false);
     }
+  }
+
+  void startNavigation() async {
+    if (routeSteps.isEmpty) return;
+
+    setState(() => isNavigating = true);
+
+    String firstInstruction = cleanHtmlText(routeSteps[0]['html_instructions']);
+    flutterTts.speak("direction to $selectedClinicName. $firstInstruction");
+
+    positionStream =
+        Geolocator.getPositionStream(
+          locationSettings: const LocationSettings(
+            accuracy: LocationAccuracy.bestForNavigation,
+            distanceFilter: 2,
+          ),
+        ).listen((Position position) {
+          if (mapController != null && isNavigating) {
+            mapController!.animateCamera(
+              CameraUpdate.newCameraPosition(
+                CameraPosition(
+                  target: LatLng(position.latitude, position.longitude),
+                  zoom: 19,
+                  tilt: 60,
+                  bearing: position.heading,
+                ),
+              ),
+            );
+
+            if (routeSteps.isNotEmpty) {
+              var nextStep = routeSteps[0];
+              var stepLoc = nextStep['end_location'];
+              double distanceToTurn = Geolocator.distanceBetween(
+                position.latitude,
+                position.longitude,
+                stepLoc['lat'],
+                stepLoc['lng'],
+              );
+
+              if (distanceToTurn < 30) {
+                String instruction = cleanHtmlText(
+                  nextStep['html_instructions'],
+                );
+                flutterTts.speak(instruction);
+                routeSteps.removeAt(0);
+              }
+            }
+          }
+        });
+  }
+
+  void stopNavigation() {
+    positionStream?.cancel();
+    flutterTts.stop();
+    setState(() => isNavigating = false);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      appBar: isNavigating ? null : AppBar(title: const Text("Nearby Clinics")),
+      body: Stack(
+        children: [
+          GoogleMap(
+            initialCameraPosition: CameraPosition(
+              target: LatLng(widget.lat, widget.lng),
+              zoom: 14,
+            ),
+            markers: markers,
+            polylines: polylines,
+            myLocationEnabled: true,
+            myLocationButtonEnabled: !isNavigating,
+            onMapCreated: (controller) => mapController = controller,
+          ),
+          if (isLoading) const Center(child: CircularProgressIndicator()),
+          if (distanceText != null && !isLoading)
+            Positioned(
+              bottom: 20,
+              left: 15,
+              right: 15,
+              child: Card(
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(20),
+                ),
+                elevation: 10,
+                child: Padding(
+                  padding: const EdgeInsets.all(16.0),
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Text(
+                        selectedClinicName ?? "",
+                        style: const TextStyle(
+                          fontWeight: FontWeight.bold,
+                          fontSize: 17,
+                        ),
+                      ),
+                      if (!isNavigating) ...[
+                        const SizedBox(height: 10),
+                        Row(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          children: [
+                            _modeChip("Car", Icons.directions_car, 'driving'),
+                            const SizedBox(width: 10),
+                            _modeChip(
+                              "walking",
+                              Icons.directions_walk,
+                              'walking',
+                            ),
+                          ],
+                        ),
+                      ],
+                      const Divider(),
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        children: [
+                          Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                durationText!,
+                                style: const TextStyle(
+                                  fontSize: 20,
+                                  fontWeight: FontWeight.bold,
+                                  color: Colors.green,
+                                ),
+                              ),
+                              Text(
+                                distanceText!,
+                                style: const TextStyle(color: Colors.grey),
+                              ),
+                            ],
+                          ),
+                          ElevatedButton.icon(
+                            onPressed: isNavigating
+                                ? stopNavigation
+                                : startNavigation,
+                            icon: Icon(
+                              isNavigating ? Icons.stop : Icons.navigation,
+                              color: Colors.white,
+                            ),
+                            label: Text(
+                              isNavigating ? "Exit" : "Start",
+                              style: const TextStyle(color: Colors.white),
+                            ),
+                            style: ElevatedButton.styleFrom(
+                              backgroundColor: isNavigating
+                                  ? Colors.red
+                                  : Colors.blueAccent,
+                              shape: const StadiumBorder(),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            ),
+        ],
+      ),
+    );
+  }
+
+  Widget _modeChip(String label, IconData icon, String mode) {
+    return ChoiceChip(
+      label: Text(label),
+      avatar: Icon(icon, size: 16),
+      selected: travelMode == mode,
+      onSelected: (val) {
+        if (val)
+          getDirections(
+            currentDestLat ?? widget.lat,
+            currentDestLng ?? widget.lng,
+            selectedClinicName ?? "",
+            mode,
+          );
+      },
+    );
   }
 
   List<LatLng> decodePolyline(String encoded) {
     List<LatLng> poly = [];
     int index = 0, len = encoded.length;
     int lat = 0, lng = 0;
-
     while (index < len) {
       int b, shift = 0, result = 0;
       do {
@@ -201,7 +370,6 @@ class _MapScreenState extends State<MapScreen> {
       } while (b >= 0x20);
       int dlat = ((result & 1) != 0 ? ~(result >> 1) : (result >> 1));
       lat += dlat;
-
       shift = 0;
       result = 0;
       do {
@@ -211,7 +379,6 @@ class _MapScreenState extends State<MapScreen> {
       } while (b >= 0x20);
       int dlng = ((result & 1) != 0 ? ~(result >> 1) : (result >> 1));
       lng += dlng;
-
       poly.add(LatLng(lat / 1E5, lng / 1E5));
     }
     return poly;
@@ -230,117 +397,9 @@ class _MapScreenState extends State<MapScreen> {
         if (latLng.longitude < y0!) y0 = latLng.longitude;
       }
     }
-    return LatLngBounds(northeast: LatLng(x1!, y1!), southwest: LatLng(x0!, y0!));
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: AppBar(
-        title: const Text("Nearby Clinics"),
-      ),
-      body: Stack(
-        children: [
-          GoogleMap(
-            initialCameraPosition: CameraPosition(
-              target: LatLng(widget.lat, widget.lng),
-              zoom: 14,
-            ),
-            markers: markers,
-            polylines: polylines, 
-            onMapCreated: (controller) {
-              mapController = controller;
-            },
-            myLocationEnabled: true, 
-            myLocationButtonEnabled: true,
-          ),
-          
-          if (isLoading)
-            const Center(
-              child: CircularProgressIndicator(),
-            ),
-
-          if (distanceText != null && durationText != null && !isLoading)
-            Positioned(
-              bottom: 30,
-              left: 20,
-              right: 20,
-              child: Card(
-                elevation: 5,
-                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(15)),
-                child: Padding(
-                  padding: const EdgeInsets.all(16.0),
-                  child: Column(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      Text(
-                        selectedClinicName ?? "Clinic Route",
-                        style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 18),
-                        textAlign: TextAlign.center,
-                      ),
-                      const SizedBox(height: 10),
-                      
-                      // 👇 NEW: Travel Mode Toggles 👇
-                      Row(
-                        mainAxisAlignment: MainAxisAlignment.center,
-                        children: [
-                          ChoiceChip(
-                            label: const Text("Car"),
-                            avatar: const Icon(Icons.directions_car, size: 18),
-                            selected: travelMode == 'driving',
-                            selectedColor: Colors.blue.shade100,
-                            onSelected: (selected) {
-                              if (selected && currentDestLat != null) {
-                                getDirections(currentDestLat!, currentDestLng!, selectedClinicName!, 'driving');
-                              }
-                            },
-                          ),
-                          const SizedBox(width: 15),
-                          ChoiceChip(
-                            label: const Text("Walk"),
-                            avatar: const Icon(Icons.directions_walk, size: 18),
-                            selected: travelMode == 'walking',
-                            selectedColor: Colors.green.shade100,
-                            onSelected: (selected) {
-                              if (selected && currentDestLat != null) {
-                                getDirections(currentDestLat!, currentDestLng!, selectedClinicName!, 'walking');
-                              }
-                            },
-                          ),
-                        ],
-                      ),
-                      const Divider(),
-
-                      // Duration and Distance Display
-                      Row(
-                        mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-                        children: [
-                          Row(
-                            children: [
-                              Icon(
-                                travelMode == 'driving' ? Icons.directions_car : Icons.directions_walk, 
-                                color: travelMode == 'driving' ? Colors.blue : Colors.green
-                              ),
-                              const SizedBox(width: 8),
-                              Text(durationText!, style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w600)),
-                            ],
-                          ),
-                          Row(
-                            children: [
-                              const Icon(Icons.route, color: Colors.black54),
-                              const SizedBox(width: 8),
-                              Text(distanceText!, style: const TextStyle(fontSize: 16)),
-                            ],
-                          ),
-                        ],
-                      ),
-                    ],
-                  ),
-                ),
-              ),
-            ),
-        ],
-      ),
+    return LatLngBounds(
+      northeast: LatLng(x1!, y1!),
+      southwest: LatLng(x0!, y0!),
     );
   }
 }
