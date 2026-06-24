@@ -53,6 +53,96 @@ class _MonitorScreenState extends State<MonitorScreen> {
   }
 
   // 🔥 MAIN FUNCTION
+  // Future processMonitor() async {
+  //   if (newImage == null) {
+  //     setState(() => result = "Please select image first");
+  //     return;
+  //   }
+
+  //   setState(() => isLoading = true);
+
+  //   try {
+  //     final user = supabase.auth.currentUser;
+
+  //     if (user == null) {
+  //       setState(() => result = "User not logged in");
+  //       return;
+  //     }
+
+  //     // 🔥 1) Upload new image
+  //     final fileName =
+  //         "${user.id}_${DateTime.now().millisecondsSinceEpoch}.jpg";
+
+  //     await supabase.storage.from('Images').upload(fileName, newImage!);
+
+  //     final newImageUrl = supabase.storage
+  //         .from('Images')
+  //         .getPublicUrl(fileName);
+
+  //     // 🤖 2) Call compare API (JSON)
+  //       const url = "https://lomi21lomi-Test-Seg.hf.space/compare";
+  //     // const url = "https://rf3t-skin-disease-backend.hf.space/compare";
+
+  //     final response = await http.post(
+  //       Uri.parse(url),
+  //       headers: {"Content-Type": "application/json"},
+  //       body: jsonEncode({
+  //         "old_url": widget.oldScan['image_url'],
+  //         "new_url": newImageUrl,
+  //       }),
+  //     );
+
+  //     Map<String, dynamic> data = {};
+
+  //     try {
+  //       data = jsonDecode(response.body);
+  //     } catch (e) {
+  //       setState(() {
+  //         result = "Invalid server response";
+  //       });
+  //       return;
+  //     }
+  //     if (data['status'] == 'error') {
+  //       // ❌ delete uploaded image
+  //       await supabase.storage.from('Images').remove([fileName]);
+  //       setState(() {
+  //         // result = safeText(data['detail'] ?? data['message'] ?? data['error']);
+  //         result = safeText(data['message']);
+  //       });
+  //       return;
+  //     }
+
+  //     // 💾 3) Save to DB
+  //     await supabase.from('monitors').insert({
+  //       'userid': user.id,
+  //       'scanid': widget.oldScan['id'],
+  //       'oldimageurl': widget.oldScan['image_url'],
+  //       'newimageurl': newImageUrl,
+  //       'similarity': data['similarity'],
+  //       'severity_before': data['severity_before'],
+  //       'severity_after': data['severity_after'],
+  //       'result': data['result'],
+  //       'date': DateTime.now().toIso8601String(),
+  //     });
+
+  //     // ✅ Show result
+  //     setState(() {
+  //       if (response.statusCode == 200 && data.containsKey('similarity')) {
+  //         result =
+  //             "Result: ${safeText(data['result'])}\nSimilarity: ${data['similarity']}";
+  //       } else {
+  //         result = result = safeText(
+  //           data['detail'] ?? data['message'] ?? data['error'],
+  //         );
+  //       }
+  //     });
+  //   } catch (e) {
+  //     setState(() => result = "Error: $e");
+  //   }
+
+  //   setState(() => isLoading = false);
+  // }
+
   Future processMonitor() async {
     if (newImage == null) {
       setState(() => result = "Please select image first");
@@ -69,7 +159,6 @@ class _MonitorScreenState extends State<MonitorScreen> {
         return;
       }
 
-      // 🔥 1) Upload new image
       final fileName =
           "${user.id}_${DateTime.now().millisecondsSinceEpoch}.jpg";
 
@@ -79,8 +168,7 @@ class _MonitorScreenState extends State<MonitorScreen> {
           .from('Images')
           .getPublicUrl(fileName);
 
-      // 🤖 2) Call compare API (JSON)
-      const url = "https://rf3t-skin-disease-backend.hf.space/compare";
+      const url = "https://lomi21lomi-Monitor.hf.space/compare";
 
       final response = await http.post(
         Uri.parse(url),
@@ -101,17 +189,17 @@ class _MonitorScreenState extends State<MonitorScreen> {
         });
         return;
       }
+
       if (data['status'] == 'error') {
-        // ❌ delete uploaded image
         await supabase.storage.from('Images').remove([fileName]);
+
         setState(() {
-          // result = safeText(data['detail'] ?? data['message'] ?? data['error']);
           result = safeText(data['message']);
         });
+
         return;
       }
 
-      // 💾 3) Save to DB
       await supabase.from('monitors').insert({
         'userid': user.id,
         'scanid': widget.oldScan['id'],
@@ -124,22 +212,23 @@ class _MonitorScreenState extends State<MonitorScreen> {
         'date': DateTime.now().toIso8601String(),
       });
 
-      // ✅ Show result
       setState(() {
         if (response.statusCode == 200 && data.containsKey('similarity')) {
           result =
               "Result: ${safeText(data['result'])}\nSimilarity: ${data['similarity']}";
         } else {
-          result = result = safeText(
-            data['detail'] ?? data['message'] ?? data['error'],
-          );
+          result = safeText(data['detail'] ?? data['message'] ?? data['error']);
         }
       });
     } catch (e) {
-      setState(() => result = "Error: $e");
+      setState(() {
+        result = "Error: $e";
+      });
+    } finally {
+      setState(() {
+        isLoading = false;
+      });
     }
-
-    setState(() => isLoading = false);
   }
 
   @override

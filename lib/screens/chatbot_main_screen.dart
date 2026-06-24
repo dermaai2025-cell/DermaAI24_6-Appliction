@@ -18,7 +18,8 @@ class ChatMainScreen extends StatefulWidget {
 }
 
 class _ChatMainScreenState extends State<ChatMainScreen> {
-  final String baseUrl = "https://web-production-8714e.up.railway.app";
+  final String baseUrl = "https://web-production-a1506.up.railway.app";
+  // "https://web-production-8714e.up.railway.app";
   final TextEditingController controller = TextEditingController();
 
   final AudioPlayer _audioPlayer = AudioPlayer();
@@ -42,6 +43,10 @@ class _ChatMainScreenState extends State<ChatMainScreen> {
     super.initState();
     loadChats();
     _addWelcomeMessage();
+  }
+
+  Future<void> stopSpeaking() async {
+    await _audioPlayer.stop();
   }
 
   void _addWelcomeMessage() {
@@ -85,8 +90,8 @@ class _ChatMainScreenState extends State<ChatMainScreen> {
     }
   }
 
-
   void _listen() async {
+    await stopSpeaking();
     var status = await Permission.microphone.request();
     if (status != PermissionStatus.granted) return;
 
@@ -209,6 +214,8 @@ class _ChatMainScreenState extends State<ChatMainScreen> {
   }
 
   Future<void> sendMessage(String text) async {
+    await stopSpeaking();
+
     if (text.trim().isEmpty) return;
 
     // تحديث الواجهة برسالة المستخدم فوراً
@@ -225,19 +232,19 @@ class _ChatMainScreenState extends State<ChatMainScreen> {
 
       String lang = isArabic(currentInput) ? "ar" : "en";
       final res = await http
-    .post(
-      Uri.parse("$baseUrl$endpoint"),
-      headers: {
-        "Content-Type": "application/json",
-        "Authorization": "Bearer ${session?.accessToken}",
-      },
-      body: jsonEncode({
-        "chat_id": currentChatId,
-        "text": currentInput,
-        "lang": lang,
-      }),
-    )
-    .timeout(const Duration(seconds: 60));
+          .post(
+            Uri.parse("$baseUrl$endpoint"),
+            headers: {
+              "Content-Type": "application/json",
+              "Authorization": "Bearer ${session?.accessToken}",
+            },
+            body: jsonEncode({
+              "chat_id": currentChatId,
+              "text": currentInput,
+              "lang": lang,
+            }),
+          )
+          .timeout(const Duration(seconds: 60));
 
       if (res.statusCode == 200) {
         final data = jsonDecode(res.body);
@@ -402,6 +409,12 @@ class _ChatMainScreenState extends State<ChatMainScreen> {
               color: _isListening ? Colors.red : customBlue,
             ),
             onPressed: _listen,
+          ),
+          IconButton(
+            icon: Icon(Icons.stop_circle, color: Colors.red),
+            onPressed: () {
+              stopSpeaking();
+            },
           ),
           Expanded(
             child: TextField(

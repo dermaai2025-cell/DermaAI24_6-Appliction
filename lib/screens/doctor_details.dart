@@ -127,20 +127,6 @@ class DoctorDetails extends StatelessWidget {
             SizedBox(
               width: double.infinity,
               height: 55,
-              child: ElevatedButton(
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: primaryBlue,
-                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(15)),
-                  elevation: 2,
-                ),
-                onPressed: () {
-                  // TODO: Implement Booking Logic
-                },
-                child: const Text(
-                  "Book Appointment",
-                  style: TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.bold),
-                ),
-              ),
             ),
           ],
         ),

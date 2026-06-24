@@ -87,11 +87,11 @@ Future<void> saveScan({
 
     setState(() => _isLoading = true);
 
-    const url = "https://rf3t-skin-disease-backend.hf.space/predict";
+    const url = "https://lomi21lomi-Test-Seg.hf.space/predict";
 
     try {
       var request = http.MultipartRequest('POST', Uri.parse(url));
-      request.files.add(await http.MultipartFile.fromPath('image', _imageFile!.path));
+      request.files.add(await http.MultipartFile.fromPath('file', _imageFile!.path));
 
       // Standard timeout for deep analysis
       var streamedResponse = await request.send().timeout(const Duration(seconds: 30));
@@ -145,17 +145,19 @@ Future<void> saveScan({
       isError: true,
     );
   }
+  
 }
 
-  void _showResultSheet({
+  // void _showResultSheet
+  Future<void> _showResultSheet({
     required String title,
     String? disease,
     String? confidence,
     String? message,
     String? suggestion,
     required bool isError,
-  }) {
-    showModalBottomSheet(
+  })async  {
+    await showModalBottomSheet(
       context: context,
       isScrollControlled: true,
       shape: const RoundedRectangleBorder(
@@ -228,6 +230,9 @@ Future<void> saveScan({
         ),
       ),
     );
+    if (mounted) {
+  Navigator.pop(context);
+}
   }
 
   void _showSnackBar(String msg) {
